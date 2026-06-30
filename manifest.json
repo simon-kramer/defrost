@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Defrost",
+  "version": "1.0.0",
+  "description": "Defrost — decodes React Router .data (turbo-stream) responses into readable JSON in a DevTools panel.",
+  "devtools_page": "devtools.html",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "defrost@plugins.local",
+      "strict_min_version": "115.0"
+    }
+  }
+}

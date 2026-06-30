@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Defrost</title>
+    <style>
+      :root {
+        --bg: #1e1e1e;
+        --bg-alt: #252526;
+        --border: #333;
+        --fg: #d4d4d4;
+        --muted: #888;
+        --accent: #7c3aed;
+        --accent-fg: #c4b5fd;
+        --green: #4ec9b0;
+        --red: #f48771;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #ffffff;
+          --bg-alt: #f3f3f3;
+          --border: #e0e0e0;
+          --fg: #1f1f1f;
+          --muted: #777;
+          --accent: #7c3aed;
+          --accent-fg: #6d28d9;
+          --green: #0a7c5a;
+          --red: #c0392b;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        font: 12px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        color: var(--fg);
+        background: var(--bg);
+      }
+      #toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-alt);
+      }
+      #toolbar .title { font-weight: 600; color: var(--accent-fg); }
+      #toolbar .spacer { flex: 1; }
+      #toolbar button {
+        font: inherit;
+        color: var(--fg);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 3px 10px;
+        cursor: pointer;
+      }
+      #toolbar button:hover { background: var(--bg); border-color: var(--accent); }
+      #toolbar input[type="search"] {
+        font: inherit;
+        color: var(--fg);
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 3px 8px;
+        width: 180px;
+      }
+      .count { color: var(--muted); }
+      #layout { display: flex; height: calc(100% - 35px); }
+      #list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        width: 38%;
+        min-width: 220px;
+        max-width: 520px;
+        overflow: auto;
+        border-right: 1px solid var(--border);
+        resize: horizontal;
+      }
+      #list li {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        padding: 5px 10px;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #list li:hover { background: var(--bg-alt); }
+      #list li.active { background: rgba(124, 58, 237, 0.18); }
+      #list li .method { color: var(--green); font-weight: 600; flex: 0 0 auto; }
+      #list li .path { color: var(--fg); overflow: hidden; text-overflow: ellipsis; }
+      #list li .badge {
+        margin-left: auto;
+        color: var(--muted);
+        flex: 0 0 auto;
+        font-size: 11px;
+      }
+      #detail { flex: 1; overflow: auto; position: relative; }
+      #empty {
+        color: var(--muted);
+        padding: 24px;
+        text-align: center;
+      }
+      #empty code {
+        color: var(--accent-fg);
+        background: var(--bg-alt);
+        padding: 1px 5px;
+        border-radius: 3px;
+      }
+      #output { padding: 8px 10px; }
+      #output.error {
+        color: var(--red);
+        white-space: pre-wrap;
+        padding: 12px 14px;
+      }
+      .tree details > summary {
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+        white-space: nowrap;
+      }
+      .tree summary::-webkit-details-marker { display: none; }
+      .tree summary::before {
+        content: "▶";
+        display: inline-block;
+        width: 1em;
+        margin-right: 2px;
+        color: var(--muted);
+        font-size: 9px;
+        transition: transform 0.12s ease;
+      }
+      .tree details[open] > summary::before { transform: rotate(90deg); }
+      .tree .children {
+        margin-left: 5px;
+        padding-left: 11px;
+        border-left: 1px solid var(--border);
+      }
+      .tree .row {
+        white-space: nowrap;
+        padding-left: calc(1em + 2px);
+      }
+      .tree .key { color: var(--accent-fg); }
+      .tree .key::after { content: ": "; color: var(--muted); }
+      .tree .preview { color: var(--muted); }
+      .tree .v-string { color: var(--green); }
+      .tree .v-number { color: #4aa3df; }
+      .tree .v-boolean { color: #c586c0; }
+      .tree .v-date { color: #d7ba7d; }
+      .tree .v-null,
+      .tree .v-undefined { color: var(--muted); font-style: italic; }
+    </style>
+  </head>
+  <body>
+    <div id="toolbar">
+      <span class="title">Defrost</span>
+      <span class="count" id="count">0</span>
+      <span class="spacer"></span>
+      <input type="search" id="filter" placeholder="Filter nach Pfad…" />
+      <button id="expand" title="Alles aufklappen">Expand</button>
+      <button id="collapse" title="Alles zuklappen">Collapse</button>
+      <button id="copy" title="Dekodiertes JSON kopieren">Copy JSON</button>
+      <button id="clear" title="Liste leeren">Clear</button>
+    </div>
+    <div id="layout">
+      <ul id="list"></ul>
+      <div id="detail">
+        <div id="empty">
+          Lade/navigiere in einer React-Router-Seite.<br />
+          <code>.data</code>-Requests erscheinen hier automatisch — anklicken zeigt das dekodierte JSON.
+        </div>
+        <div id="output" class="tree"></div>
+      </div>
+    </div>
+    <script src="panel.js"></script>
+  </body>
+</html>

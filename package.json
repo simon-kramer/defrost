@@ -1,0 +1,19 @@
+{
+  "name": "defrost",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Defrost — DevTools panel that decodes React Router 7 .data (turbo-stream) responses into readable JSON.",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/panel.ts src/devtools.ts --bundle --format=iife --target=chrome110,firefox115 --outdir=.",
+    "watch": "esbuild src/panel.ts src/devtools.ts --bundle --format=iife --target=chrome110,firefox115 --outdir=. --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "pnpm build && rm -f defrost.xpi && zip -q -X defrost.xpi manifest.json devtools.html devtools.js panel.html panel.js README.md && echo \"packaged -> defrost.xpi\""
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.2.0",
+    "esbuild": "^0.24.0",
+    "turbo-stream": "^2.4.0",
+    "typescript": "^6.0.3"
+  }
+}
