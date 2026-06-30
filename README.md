@@ -1,5 +1,313 @@
 # Defrost
 
+**English** · [Deutsch ↓](#defrost-deutsch)
+
+A browser DevTools extension that thaws the "frozen" `.data` responses of
+**React Router 7** (single-fetch, `turbo-stream` / `text/x-script`) right inside the
+browser and shows them as a readable, collapsible JSON tree.
+
+Runs as a **Manifest V3 extension in Chrome and Firefox** from a single codebase.
+
+---
+
+## Contents
+
+- [The problem](#the-problem)
+- [What the tool does](#what-the-tool-does)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Build](#build)
+- [Install in Chrome](#install-in-chrome)
+- [Install in Firefox](#install-in-firefox)
+- [Usage](#usage)
+- [Updating after changes](#updating-after-changes)
+- [Keeping turbo-stream in sync](#keeping-turbo-stream-in-sync)
+- [How it works](#how-it-works)
+- [Project structure](#project-structure)
+- [Script reference](#script-reference)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## The problem
+
+React Router 7 does not transmit loader/action data as plain JSON, but in the
+`turbo-stream` format (content type `text/x-script`). In the browser's Network tab a
+`.data` response therefore looks like a flat reference table:
+
+```
+[{"_1":2},"routes/_withNavbar+/customs-declarations+/shipments",{"_3":4},"data",
+{"_5":6,"_7":8,...},"openShipments",[],"pagination",{"_9":10,...}]
+```
+
+The numbers (`_1`, `_3`, …) are pointers to other entries in the same table — the
+format deduplicates values, supports streaming and richer types than JSON. But it is
+not readable. **Defrost** decodes it back into the actual, nested object.
+
+## What the tool does
+
+- Adds a **"Defrost"** panel to the DevTools.
+- Automatically lists every `.data` request on the current page (method, path, status).
+- On clicking a request: shows the **decoded response as a JSON tree** (collapsible,
+  type-colored).
+- Resolves deferred promises; preserves `Date`, `Map`, `Set`, `BigInt`.
+- **Copy JSON**, **Expand/Collapse all**, **Filter** by path, **Clear**.
+- `turbo-stream` is bundled into the extension → no CDN, no CSP issues, works on
+  production too (e.g. `shipping.formbench.com`).
+
+---
+
+## Requirements
+
+- **Node.js** ≥ 20 (tested with 24)
+- **pnpm** (via Corepack: `corepack enable`)
+- **Chrome** (or Chromium/Edge/Brave) and/or **Firefox Developer Edition**
+  (or Nightly/ESR) for permanently installing unsigned add-ons.
+
+---
+
+## Quick start
+
+```sh
+cd /Users/simon/Projekte/plugins/defrost
+pnpm install
+pnpm build       # produces panel.js + devtools.js
+```
+
+Then:
+
+- **Chrome:** `chrome://extensions` → enable Developer mode → "Load unpacked" → select
+  this folder.
+- **Firefox:** `pnpm package` → install `defrost.xpi` via `about:addons`
+  (see [Install in Firefox](#install-in-firefox)).
+
+Open DevTools (F12) → **Defrost** tab → reload the page.
+
+---
+
+## Build
+
+The tool is written in **TypeScript** and bundled with esbuild.
+
+```sh
+pnpm install        # once
+pnpm build          # src/*.ts -> panel.js + devtools.js (turbo-stream bundled in)
+pnpm watch          # rebuild on every change (during development)
+pnpm typecheck      # tsc --noEmit (type check only, builds nothing)
+pnpm package        # build + zip everything into defrost.xpi
+```
+
+`panel.js` and `devtools.js` in the root are **build artifacts**. After any change
+under `src/` you must rebuild (`pnpm build`), otherwise the browser keeps running the
+old version.
+
+---
+
+## Install in Chrome
+
+Chrome loads unpacked extensions **permanently** — they survive restarts. Publishing
+to the Web Store is not required for internal use.
+
+1. Run `pnpm build` (produces `panel.js`/`devtools.js`).
+2. Open `chrome://extensions`.
+3. Enable **Developer mode** (top right).
+4. Click **Load unpacked** and select this project folder.
+5. The extension appears in the list and stays installed.
+6. Open DevTools (F12 or `Cmd+Opt+I`) → **Defrost** tab.
+
+### Permanent use in Chrome
+
+- The extension survives browser restarts.
+- Chrome occasionally shows a "Disable developer mode extensions" prompt on startup.
+  You can dismiss it — the extension stays active. To avoid the prompt entirely the
+  extension would have to be installed via the Web Store or an enterprise policy.
+- **Updates:** after `pnpm build`, click the **reload icon** (↻) on the extension in
+  `chrome://extensions`. Then close and reopen DevTools.
+
+> Works identically in Edge (`edge://extensions`) and Brave (`brave://extensions`).
+
+---
+
+## Install in Firefox
+
+Firefox normally does **not** install unsigned extensions permanently.
+**Firefox Developer Edition**, **Nightly** and **ESR** allow it once signature
+enforcement is disabled. This is the recommended path for internal use.
+
+### Permanent (Developer Edition / Nightly / ESR)
+
+1. **Disable signature enforcement** (once, **before** installing):
+   - Type `about:config` in the address bar, accept the warning.
+   - Search for `xpinstall.signatures.required`.
+   - Set the value to **`false`** (double-click).
+2. **Build the package:**
+   ```sh
+   pnpm package      # produces defrost.xpi
+   ```
+3. **Install:**
+   - Open `about:addons`.
+   - Click the **gear ⚙** (top right) → **Install Add-on From File…**.
+   - Select `defrost.xpi` from the project folder.
+   - Confirm with **Add**.
+   - Alternatively: drag the `defrost.xpi` file onto the Firefox window.
+4. Open DevTools (F12) → **Defrost** tab.
+
+The extension now stays installed across restarts.
+
+### Temporary (any Firefox, until restart)
+
+Quick one-off look, no signature setting needed — disappears when Firefox quits:
+
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click **Load Temporary Add-on…**.
+3. Select `manifest.json` in the project folder.
+4. Open DevTools (F12) → **Defrost** tab.
+
+### Regular Firefox release (signed)
+
+Regular Firefox release ignores `xpinstall.signatures.required` — there a
+Mozilla-**signed** `.xpi` is mandatory. Use `web-ext sign` for that (AMO account + API
+keys, "unlisted"/self-distribution). A `sign` script can be added on request.
+
+### Permanent use in Firefox
+
+- As long as `xpinstall.signatures.required = false` stays set, the file-installed
+  `defrost.xpi` remains active permanently.
+- **Updates:** build a new `defrost.xpi` with `pnpm package` and repeat the same
+  "Install Add-on From File…" step — Firefox updates the add-on based on the same
+  add-on ID (`defrost@plugins.local`).
+
+---
+
+## Usage
+
+1. Open DevTools and switch to the **Defrost** tab.
+2. **Important:** **reload or navigate the page while DevTools is open**. Only requests
+   that happen while DevTools is open are captured.
+3. The left list shows all `.data` requests with **method**, **path** and **status**.
+4. Click an entry → the decoded JSON appears on the right as a tree.
+
+| Control       | Function                                                          |
+| ------------- | ----------------------------------------------------------------- |
+| List (left)   | All `.data` requests on the current page.                         |
+| Filter box    | Filters the list by substring in the path.                        |
+| **Expand**    | Expands all nodes of the displayed tree.                          |
+| **Collapse**  | Collapses all nodes.                                              |
+| **Copy JSON** | Copies the decoded object as formatted JSON.                      |
+| **Clear**     | Empties the list (also happens automatically on navigation).      |
+
+In the tree, objects/arrays/`Map`/`Set` are collapsible (preview like `Array(3)`,
+`{ 5 keys }`); by default the top levels are expanded down to the `data` fields. Values
+are colored by type (string, number, boolean, `Date`, `null`).
+
+---
+
+## Updating after changes
+
+1. Change a source under `src/`.
+2. `pnpm build` (or keep `pnpm watch` running).
+3. Reload the extension:
+   - **Chrome:** `chrome://extensions` → ↻ on the extension.
+   - **Firefox:** `pnpm package` and reinstall `defrost.xpi` via `about:addons`.
+4. Close and reopen DevTools so the panel loads the new code.
+
+---
+
+## Keeping turbo-stream in sync
+
+Decoding must match the `turbo-stream` version React Router uses. React Router 7.x uses
+**turbo-stream v2**, so `package.json` pins `^2.4.0`. If the app ever moves to a new
+major version, bump it here and rebuild.
+
+---
+
+## How it works
+
+- `manifest.json` registers a panel via `chrome.devtools.panels.create` through
+  `devtools_page` (→ `devtools.html` → `devtools.js`).
+- The panel (`panel.html` + `panel.js`) listens to
+  `chrome.devtools.network.onRequestFinished` and filters requests whose path ends in
+  `.data` or whose MIME type is `text/x-script`.
+- The response body is fetched with `request.getContent()` (callback style in Chrome,
+  promise style in Firefox — both are handled).
+- The body is fed through `decode()` from the bundled `turbo-stream`. Deferred promises
+  are resolved, special types (`Date`, `Map`, `Set`, `BigInt`) are preserved.
+- The result is rendered as a DOM tree using native `<details>` elements.
+
+A single MV3 manifest works in Chrome and Firefox; the only browser-specific parts are
+`browser_specific_settings.gecko` (ignored by Chrome) and the runtime fallback
+`browser` → `chrome`.
+
+---
+
+## Project structure
+
+```
+defrost/
+├─ manifest.json        MV3 manifest (Chrome + Firefox)
+├─ devtools.html        loads the built devtools.js
+├─ panel.html           panel UI (markup + styles)
+├─ tsconfig.json        TypeScript config (type check only)
+├─ package.json         scripts + dependencies (pnpm)
+├─ src/
+│  ├─ devtools.ts       registers the DevTools panel
+│  ├─ panel.ts          request list, decode, tree view
+│  └─ globals.d.ts      ambient types: browser global + DevToolsRequest
+├─ panel.js             build artifact (from src/panel.ts)
+├─ devtools.js          build artifact (from src/devtools.ts)
+└─ defrost.xpi          Firefox package (from pnpm package)
+```
+
+---
+
+## Script reference
+
+| Script           | Effect                                                          |
+| ---------------- | --------------------------------------------------------------- |
+| `pnpm build`     | Bundles `src/panel.ts` and `src/devtools.ts` into `*.js`.       |
+| `pnpm watch`     | Like `build`, rebuilds on every file change.                    |
+| `pnpm typecheck` | `tsc --noEmit` — checks types without building.                 |
+| `pnpm package`   | `build` + zips the add-on into `defrost.xpi`.                   |
+
+---
+
+## Troubleshooting
+
+**The panel stays empty / no requests.**
+DevTools must be open *before* loading/navigating. Open DevTools, select the
+**Defrost** tab, then reload the page with F5.
+
+**"This add-on could not be verified" / add-on gets disabled in Firefox.**
+`xpinstall.signatures.required` was not `false` at install time. Set the pref, restart
+Firefox, reinstall `defrost.xpi`. Only works in Developer Edition/Nightly/ESR — regular
+release requires a signed `.xpi`.
+
+**The panel shows "Decode failed".**
+Usually a `turbo-stream` version mismatch with the app. See
+[Keeping turbo-stream in sync](#keeping-turbo-stream-in-sync).
+
+**Code changes have no effect.**
+Forgot `pnpm build`, or didn't reload the extension. Build, reload the extension
+(Chrome: ↻; Firefox: reinstall `defrost.xpi`), close and reopen DevTools.
+
+**The build complains about esbuild / a missing binary.**
+pnpm blocks build scripts by default. Run `pnpm approve-builds` once and allow esbuild,
+then redo `pnpm install`.
+
+**`__manifest` requests are missing.**
+Intentional — Defrost only shows `.data` responses (the actual loader/action data). The
+route manifest is just routing metadata.
+
+<br>
+
+---
+
+<br>
+
+# Defrost (Deutsch)
+
+[English ↑](#defrost) · **Deutsch**
+
 Eine Browser-DevTools-Erweiterung, die die „eingefrorenen" `.data`-Antworten von
 **React Router 7** (Single-Fetch, `turbo-stream` / `text/x-script`) im laufenden
 Browser wieder auftaut und als lesbaren, aufklappbaren JSON-Baum anzeigt.
